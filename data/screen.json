@@ -1,7 +1,14 @@
 {
   "product": "latte-tv-screen",
   "schema": 1,
-  "revision": "initial",
+  "revision": "9ba4a8e2-45e1-4c93-97ad-24f20ded8194",
   "duty": null,
-  "posters": null
+  "posters": [
+    {
+      "sha256": "32794f22662b6b21a891ad2fe3f427ca300cae5796af0180df3c0eb0e61bdf92",
+      "ext": "jpg",
+      "bytes": 184508,
+      "label": "微信图片_20261102105941_53_122.jpg"
+    }
+  ]
 }
