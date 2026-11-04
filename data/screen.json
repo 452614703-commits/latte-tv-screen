@@ -1,7 +1,7 @@
 {
   "product": "latte-tv-screen",
   "schema": 1,
-  "revision": "515c87b2-ce2d-4662-b66b-0314d74e6bb5",
+  "revision": "a726b6e9-1f04-40e9-8082-978ed24d7326",
   "duty": {
     "names": [
       "柳钦",
@@ -12,18 +12,5 @@
     "anchorDate": "2026-11-04",
     "anchorPerson": "柳钦"
   },
-  "posters": [
-    {
-      "sha256": "32794f22662b6b21a891ad2fe3f427ca300cae5796af0180df3c0eb0e61bdf92",
-      "ext": "jpg",
-      "bytes": 184508,
-      "label": "微信图片_20261102105941_53_122.jpg"
-    },
-    {
-      "sha256": "3a53a058d48a1f2b096c36e65f1607f4b2c13d96327ba30b0518fddba4ec7a86",
-      "ext": "png",
-      "bytes": 449065,
-      "label": "2024年春节放假2.png"
-    }
-  ]
+  "posters": []
 }
