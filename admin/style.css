@@ -12,8 +12,8 @@ h2 { font-size: 1.24rem; margin: 0 0 12px; }
 p { margin: 5px 0 0; }
 section { background: #242321; border: 1px solid #45413d; border-radius: 16px; padding: clamp(14px, 4vw, 25px); margin-bottom: 14px; }
 fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
-#connection, .anchor { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
-#connection label, .anchor label { display: grid; flex: 1 1 180px; gap: 5px; }
+#connection:not([hidden]), #unlock:not([hidden]), .password-setup:not([hidden]), .anchor { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+#connection label:not(.remember), #unlock label, .anchor label { display: grid; flex: 1 1 180px; gap: 5px; }
 input, select, button { font: inherit; }
 input:not([type=checkbox]), select, button { min-height: 42px; border: 1px solid #625b53; border-radius: 8px; background: #191816; color: inherit; padding: 7px 10px; min-width: 0; }
 button { cursor: pointer; white-space: nowrap; }
@@ -36,3 +36,5 @@ footer { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .primary { background: #e9c8aa; border-color: #e9c8aa; color: #201a15; font-weight: 700; padding-inline: 18px; }
 #status { margin-top: 16px; padding: 10px 14px; background: #272522; border-radius: 8px; overflow-wrap: anywhere; }
 #status.error { color: #ffd0c3; }
+.full-width { flex: 1 1 100%; }
+.remember:not([hidden]), .login-actions:not([hidden]) { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }

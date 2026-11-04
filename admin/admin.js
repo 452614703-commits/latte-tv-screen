@@ -2,9 +2,15 @@
   "use strict";
 
   const data = window.LatteScreenData;
+  const vault = window.LatteCredentialVault;
+  const storageKey = "latte-tv-screen:credential:v1:" + new URL(".", location.href).pathname;
   const byId = id => document.getElementById(id);
   const ui = {
     connection: byId("connection"), repository: byId("repository"), token: byId("token"),
+    unlock: byId("unlock"), unlockPassword: byId("unlock-password"), remember: byId("remember"),
+    passwordSetup: byId("password-setup"), newPassword: byId("new-password"), confirmPassword: byId("confirm-password"),
+    useToken: byId("use-token"), usePassword: byId("use-password"), connected: byId("connected"),
+    reload: byId("reload-repository"), lock: byId("lock-admin"),
     editor: byId("editor"), useDuty: byId("use-duty"), usePosters: byId("use-posters"),
     dutyEditor: byId("duty-editor"), posterEditor: byId("poster-editor"),
     roster: byId("roster"), posters: byId("posters"), date: byId("anchor-date"),
@@ -14,6 +20,7 @@
   const pending = new Map();
   const previews = new Map();
   let repository;
+  let savedCredential;
   let posters = [];
   let names = [];
   let busy = false;
@@ -43,7 +50,10 @@
   function setBusy(value) {
     busy = value;
     ui.editor.disabled = value || !repository;
-    for (const control of ui.connection.elements) control.disabled = value;
+    for (const control of [...ui.connection.elements, ...ui.unlock.elements, ui.reload, ui.lock]) {
+      control.disabled = value;
+    }
+    ui.passwordSetup.disabled = value || !ui.remember.checked;
     ui.publish.disabled = value || !dirty;
   }
 
@@ -234,25 +244,109 @@
     if (operation === monitor) status("GitHub 已保存。网页部署仍待确认，可在仓库的 Actions 页面查看进度。");
   }
 
-  ui.connection.addEventListener("submit", async event => {
-    event.preventDefault();
-    if (dirty && !window.confirm("重新读取会放弃本页待发布的修改。继续读取？")) return;
-    const token = ui.token.value.trim();
-    ui.token.value = "";
+  function showLogin(withPassword) {
+    ui.unlock.hidden = !withPassword;
+    ui.connection.hidden = withPassword;
+    ui.usePassword.hidden = !savedCredential;
+    status(withPassword ? "请输入后台密码。" : "输入 GitHub 令牌连接仓库。");
+  }
+
+  async function connect(readRepository) {
+    if (busy || (dirty && !window.confirm("重新读取会放弃本页待发布的修改。继续读取？"))) return;
     monitor++;
     setBusy(true);
     status("正在读取仓库");
     try {
-      const next = new window.LatteGitHubRepository(ui.repository.value.trim(), token);
-      const value = await next.connect();
+      const { next, value, notice } = await readRepository();
       repository = next;
       load(value);
-      status("仓库已连接，可以编辑并发布。");
+      ui.connection.hidden = true;
+      ui.unlock.hidden = true;
+      ui.connected.hidden = false;
+      status(notice || "仓库已连接，可以编辑并发布。");
     } catch (error) {
       status(error.message, true);
     } finally {
       setBusy(false);
     }
+  }
+
+  ui.remember.addEventListener("change", () => {
+    ui.passwordSetup.hidden = !ui.remember.checked;
+    ui.passwordSetup.disabled = !ui.remember.checked;
+    if (!ui.remember.checked) {
+      ui.newPassword.value = "";
+      ui.confirmPassword.value = "";
+    }
+  });
+
+  ui.connection.addEventListener("submit", event => {
+    event.preventDefault();
+    const fullName = ui.repository.value.trim();
+    const token = ui.token.value.trim();
+    const remember = ui.remember.checked;
+    const password = ui.newPassword.value;
+    if (remember && password !== ui.confirmPassword.value) {
+      status("两次输入的后台密码不一致。", true);
+      return;
+    }
+    ui.token.value = "";
+    ui.newPassword.value = "";
+    ui.confirmPassword.value = "";
+    connect(async () => {
+      const next = new window.LatteGitHubRepository(fullName, token);
+      const value = await next.connect();
+      let notice;
+      if (remember) {
+        try {
+          const record = await vault.seal(fullName, token, password);
+          localStorage.setItem(storageKey, JSON.stringify(record));
+          savedCredential = record;
+          notice = "仓库已连接，可以编辑并发布。下次打开此浏览器的后台可用密码解锁。";
+        } catch (error) {
+          notice = "仓库已连接。此浏览器未能保存令牌，下次请使用令牌连接。";
+        }
+      }
+      return { next, value, notice };
+    });
+  });
+
+  ui.unlock.addEventListener("submit", event => {
+    event.preventDefault();
+    const password = ui.unlockPassword.value;
+    ui.unlockPassword.value = "";
+    connect(async () => {
+      const fullName = ui.repository.value.trim();
+      const token = await vault.open(savedCredential, fullName, password);
+      const next = new window.LatteGitHubRepository(fullName, token);
+      return { next, value: await next.connect() };
+    });
+  });
+
+  ui.useToken.addEventListener("click", () => {
+    ui.unlockPassword.value = "";
+    showLogin(false);
+    ui.token.focus();
+  });
+
+  ui.usePassword.addEventListener("click", () => {
+    ui.token.value = "";
+    ui.newPassword.value = "";
+    ui.confirmPassword.value = "";
+    showLogin(true);
+    ui.unlockPassword.focus();
+  });
+
+  ui.reload.addEventListener("click", () => connect(async () => ({
+    next: repository, value: await repository.connect()
+  })));
+
+  ui.lock.addEventListener("click", () => {
+    if (!dirty || window.confirm("锁定会放弃本页待发布的修改。继续锁定？")) window.location.reload();
+  });
+
+  window.addEventListener("pageshow", event => {
+    if (event.persisted && repository) window.location.reload();
   });
 
   ui.useDuty.addEventListener("change", () => { renderSections(); setDirty(true); });
@@ -319,4 +413,19 @@
     ui.repository.value = owner + "/" + (firstPart && firstPart !== "admin" ? firstPart : owner + ".github.io");
     ui.repository.readOnly = true;
   }
+
+  if (vault && window.crypto?.subtle) {
+    byId("remember-option").hidden = false;
+    try {
+      const record = JSON.parse(localStorage.getItem(storageKey));
+      if (record && record.version === 1 && typeof record.repository === "string" &&
+          (!ui.repository.value || record.repository === ui.repository.value)) {
+        savedCredential = record;
+        ui.repository.value = record.repository;
+      }
+    } catch (error) {
+      // The connection form is also usable when storage is disabled.
+    }
+  }
+  showLogin(Boolean(savedCredential));
 })();

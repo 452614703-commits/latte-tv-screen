@@ -6,10 +6,11 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self' https://api.github.com; base-uri 'none'; form-action 'none'">
   <title>拿铁信息屏 · 管理后台</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2">
   <script defer src="../screen-data.js"></script>
   <script defer src="github-repository.js"></script>
-  <script defer src="admin.js"></script>
+  <script defer src="credential-vault.js"></script>
+  <script defer src="admin.js?v=2"></script>
 </head>
 <body>
   <main>
@@ -21,13 +22,33 @@
     </header>
 
     <section>
-      <h2>连接 GitHub 仓库</h2>
+      <h2>进入管理后台</h2>
+      <form id="unlock" hidden>
+        <label>后台密码 <input id="unlock-password" required type="password" maxlength="256" autocomplete="current-password"></label>
+        <button type="submit" class="primary">解锁后台</button>
+        <button type="button" id="use-token">改用令牌</button>
+        <p class="hint full-width">密码用于解锁此浏览器加密保存的令牌。令牌到期或忘记密码时，可用令牌重新配置。</p>
+      </form>
       <form id="connection">
         <label>仓库 <input id="repository" required placeholder="账号名/仓库名" autocomplete="off"></label>
         <label>细粒度令牌 <input id="token" required type="password" autocomplete="off" spellcheck="false"></label>
-        <button type="submit">读取仓库</button>
+        <label id="remember-option" class="remember full-width" hidden>
+          <input id="remember" type="checkbox"> 以后用密码解锁（仅此浏览器）
+        </label>
+        <fieldset id="password-setup" class="password-setup full-width" hidden disabled>
+          <label>设置后台密码 <input id="new-password" required type="password" minlength="12" maxlength="256" autocomplete="new-password"></label>
+          <label>确认后台密码 <input id="confirm-password" required type="password" minlength="12" maxlength="256" autocomplete="new-password"></label>
+        </fieldset>
+        <div class="login-actions full-width">
+          <button type="submit" class="primary">读取仓库</button>
+          <button type="button" id="use-password" hidden>返回密码解锁</button>
+        </div>
+        <p class="hint full-width">首次设置需要此仓库的 Contents 读写令牌。密码至少 12 个字符，请使用自己的电脑设置。</p>
       </form>
-      <p class="hint">令牌只用于本次打开的后台。请授权此仓库的 Contents 读写权限。</p>
+      <div id="connected" class="login-actions" hidden>
+        <button type="button" id="reload-repository">重新读取仓库</button>
+        <button type="button" id="lock-admin">锁定后台</button>
+      </div>
     </section>
 
     <fieldset id="editor" disabled>
