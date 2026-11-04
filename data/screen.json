@@ -1,8 +1,17 @@
 {
   "product": "latte-tv-screen",
   "schema": 1,
-  "revision": "9ba4a8e2-45e1-4c93-97ad-24f20ded8194",
-  "duty": null,
+  "revision": "16db9a25-7961-4a77-a79a-2ec27ba6ed3d",
+  "duty": {
+    "names": [
+      "柳钦",
+      "石头",
+      "若芳",
+      "智杭"
+    ],
+    "anchorDate": "2026-11-04",
+    "anchorPerson": "柳钦"
+  },
   "posters": [
     {
       "sha256": "32794f22662b6b21a891ad2fe3f427ca300cae5796af0180df3c0eb0e61bdf92",
