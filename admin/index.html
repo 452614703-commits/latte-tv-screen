@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self' https://api.github.com; base-uri 'none'; form-action 'none'">
+  <title>拿铁信息屏 · 管理后台</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="../screen-data.js"></script>
+  <script defer src="github-repository.js"></script>
+  <script defer src="admin.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="brand">拿铁健身工作室 <span>V2.10.6</span></div>
+      <a href="../">打开信息屏 ↗</a>
+      <h1>信息屏管理</h1>
+      <p>调整每日卫生值班和海报顺序。发布后，网页与已连接的电视会自动更新。</p>
+    </header>
+
+    <section>
+      <h2>连接 GitHub 仓库</h2>
+      <form id="connection">
+        <label>仓库 <input id="repository" required placeholder="账号名/仓库名" autocomplete="off"></label>
+        <label>细粒度令牌 <input id="token" required type="password" autocomplete="off" spellcheck="false"></label>
+        <button type="submit">读取仓库</button>
+      </form>
+      <p class="hint">令牌只用于本次打开的后台。请授权此仓库的 Contents 读写权限。</p>
+    </section>
+
+    <fieldset id="editor" disabled>
+      <section>
+        <div class="heading">
+          <h2>值班轮值</h2>
+          <label class="toggle"><input id="use-duty" type="checkbox"> 使用在线名单</label>
+        </div>
+        <div id="duty-editor" hidden>
+          <ol id="roster" class="rows"></ol>
+          <button id="add-person" type="button">＋ 添加人员</button>
+          <div class="anchor">
+            <label>基准日期 <input id="anchor-date" type="date"></label>
+            <label>当天值班人 <select id="anchor-person"></select></label>
+          </div>
+          <p id="duty-preview" class="hint"></p>
+        </div>
+        <p id="duty-local" class="hint">电视使用原有本地名单。</p>
+      </section>
+
+      <section>
+        <div class="heading">
+          <h2>播放海报 <small id="poster-count"></small></h2>
+          <label class="toggle"><input id="use-posters" type="checkbox"> 使用在线海报</label>
+        </div>
+        <div id="poster-editor" hidden>
+          <label class="upload">导入 JPG / PNG <input id="upload" type="file" accept="image/jpeg,image/png" multiple></label>
+          <p class="hint">列表从上到下循环播放，每张 10 秒，最多 20 张。删除全部后发布会清空在线播放列表。</p>
+          <ol id="posters" class="rows"></ol>
+        </div>
+        <p id="posters-local" class="hint">电视播放本地海报，网页版等待在线海报。</p>
+      </section>
+
+      <footer>
+        <button id="publish" type="button" class="primary">发布到信息屏</button>
+        <span id="draft" class="hint"></span>
+      </footer>
+    </fieldset>
+    <p id="status" role="status" aria-live="polite">请连接已上传信息屏网页的仓库。</p>
+  </main>
+</body>
+</html>
