@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#000000">
-<title>拿铁健身工作室 · V2.10.6 GitHub版</title>
+<title>拿铁健身工作室 · V2.10.7 GitHub版</title>
 <style>
     @font-face {
       font-family: "Fredoka Embedded";
@@ -532,7 +532,7 @@ body::before,body::after {display:none !important;content:none !important;}
 <input type="file" multiple accept=".jpg,.jpeg,.png,image/jpeg,image/png" id="posterUpload" aria-label="上传海报预览">
 <div class="settings-overlay" id="settingsOverlay" hidden>
  <div class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-    <div class="settings-title" id="settingsTitle">海报设置 · V2.10.6 GitHub版</div>
+    <div class="settings-title" id="settingsTitle">海报设置 · V2.10.7 GitHub版</div>
    <p class="settings-subtitle">正在读取在线发布内容。</p>
    <button class="settings-btn" id="selectPosterBtn" type="button">打开管理后台</button>
    <button class="settings-btn" id="deletePosterBtn" type="button">删除当前海报</button>
@@ -553,6 +553,7 @@ body::before,body::after {display:none !important;content:none !important;}
       timezone: "Asia/Shanghai",
       weatherUpdateMinutes: 10,
       weatherTimeoutMs: 12000,
+      weatherRetryMinutes: [1, 2, 5],
       dutyRotation: ["待设置"],
       anchorDate: "2026-07-04",
       anchorPerson: "待设置"
@@ -921,19 +922,38 @@ body::before,body::after {display:none !important;content:none !important;}
       return map[Number(code)] || ["unavailable", "天气状态未知"];
     }
 
+    const weatherCooldown = new Map();
+    const weatherCacheKey = "latte.weather.v1:" + CONFIG.location + ":" + CONFIG.timezone;
+    let lastWeather = null;
+    let weatherFailures = 0;
+
     async function requestWeatherJson(url) {
-      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-      const timer = controller ? setTimeout(function () { controller.abort(); }, CONFIG.weatherTimeoutMs) : null;
+      const host = url.split("/")[2];
+      if (Date.now() < (weatherCooldown.get(host) || 0)) throw new Error("接口暂时限流");
+
+      const controller = typeof AbortController === "undefined" ? null : new AbortController();
+      let timer;
+      const timeout = new Promise(function (_, reject) {
+        timer = setTimeout(function () {
+          reject(new Error("请求超时"));
+          if (controller) controller.abort();
+        }, CONFIG.weatherTimeoutMs);
+      });
+      const request = async function () {
+        const response = await fetch(url, { signal: controller ? controller.signal : undefined });
+        if (response.status === 429) {
+          const retryAfter = response.headers.get("Retry-After");
+          const delay = /^\d+$/.test(retryAfter || "") ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now();
+          weatherCooldown.set(host, Date.now() + Math.max(60000, Number.isFinite(delay) ? delay : 600000));
+        }
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.json();
+      };
 
       try {
-        const response = await fetch(url, {
-          cache: "no-store",
-          signal: controller ? controller.signal : undefined
-        });
-        if (!response.ok) throw new Error("Weather request failed");
-        return await response.json();
+        return await Promise.race([request(), timeout]);
       } finally {
-        if (timer) clearTimeout(timer);
+        clearTimeout(timer);
       }
     }
 
@@ -945,7 +965,7 @@ body::before,body::after {display:none !important;content:none !important;}
       const location = String(CONFIG.location || "").trim();
 
       if (!key || !host || !location || key.indexOf("请填写") >= 0 || host.indexOf("请填写") >= 0) {
-        throw new Error("QWeather configuration is incomplete");
+        return null;
       }
 
       const url = "https://" + host + "/v7/weather/now" +
@@ -956,6 +976,7 @@ body::before,body::after {display:none !important;content:none !important;}
       if (String(data.code) !== "200" || !data.now) throw new Error("QWeather response error");
 
       return {
+        source: "和风天气",
         icon: qweatherIconName(data.now.icon),
         text: data.now.text || "天气状态未知",
         temperature: data.now.temp,
@@ -965,62 +986,134 @@ body::before,body::after {display:none !important;content:none !important;}
       };
     }
 
-    async function fetchOpenMeteo() {
-      const coordinates = String(CONFIG.location || "119.01,25.43").split(",").map(Number);
+    function weatherCoordinates() {
+      const coordinates = String(CONFIG.location).split(",").map(Number);
       const longitude = Number.isFinite(coordinates[0]) ? coordinates[0] : 119.01;
       const latitude = Number.isFinite(coordinates[1]) ? coordinates[1] : 25.43;
-      const url = "https://api.open-meteo.com/v1/forecast" +
-        "?latitude=" + latitude +
-        "&longitude=" + longitude +
-        "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m" +
-        "&timezone=" + encodeURIComponent(CONFIG.timezone);
-      const data = await requestWeatherJson(url);
-      if (!data.current) throw new Error("Open-Meteo response error");
+      return { latitude, longitude };
+    }
 
-      const weather = openMeteoWeather(data.current.weather_code);
+    async function fetchOpenMeteo() {
+      const coordinates = weatherCoordinates();
+      const url = "https://api.open-meteo.com/v1/forecast" +
+        "?latitude=" + coordinates.latitude +
+        "&longitude=" + coordinates.longitude +
+        "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m" +
+        "&timezone=" + encodeURIComponent(CONFIG.timezone) + "&forecast_days=1";
+      const data = await requestWeatherJson(url);
+      const current = data.current;
+      if (!current || current.weather_code == null) throw new Error("天气数据缺失");
+
+      const weather = openMeteoWeather(current.weather_code);
       return {
-        icon: weather[0],
-        text: weather[1],
-        temperature: data.current.temperature_2m,
-        apparentTemperature: data.current.apparent_temperature,
-        humidity: data.current.relative_humidity_2m,
-        windSpeed: data.current.wind_speed_10m
+        source: "Open-Meteo", icon: weather[0], text: weather[1],
+        temperature: current.temperature_2m, apparentTemperature: current.apparent_temperature,
+        humidity: current.relative_humidity_2m, windSpeed: current.wind_speed_10m
       };
     }
 
-    function renderWeatherData(weather) {
+    async function fetchWttr() {
+      const coordinates = weatherCoordinates();
+      const url = "https://wttr.in/" + coordinates.latitude + "," + coordinates.longitude + "?format=j1";
+      const data = await requestWeatherJson(url);
+      const current = data.current_condition && data.current_condition[0];
+      if (!current) throw new Error("天气数据缺失");
+
+      const code = Number(current.weatherCode);
+      const groups = [
+        [[113], "sun", "晴"],
+        [[116], "partly", "局部多云"],
+        [[119, 122], "cloud", "阴 / 多云"],
+        [[125, 128, 131, 134, 137, 140, 143, 146, 149, 152, 155, 158, 161, 248, 260], "fog", "雾 / 霾"],
+        [[200, 386, 389, 392, 395], "storm", "雷暴"],
+        [[179, 227, 230, 323, 326, 329, 332, 335, 338, 368, 371], "snow", "雪"],
+        [[182, 185, 281, 284, 311, 314, 317, 320, 350, 362, 365, 374, 377], "snow", "雨夹雪 / 冻雨"],
+        [[176, 263, 266, 293, 296, 353], "drizzle", "小雨 / 阵雨"],
+        [[299, 302, 305, 308, 356, 359], "rain", "降雨"]
+      ];
+      const group = groups.find(function (entry) { return entry[0].indexOf(code) >= 0; });
+
+      return {
+        source: "wttr.in", icon: group ? group[1] : "unavailable", text: group ? group[2] : "天气状态未知",
+        temperature: current.temp_C, apparentTemperature: current.FeelsLikeC,
+        humidity: current.humidity, windSpeed: current.windspeedKmph
+      };
+    }
+
+    function validWeather(weather) {
+      if (!weather || !ICONS[weather.icon] || typeof weather.text !== "string" ||
+          ["和风天气", "Open-Meteo", "wttr.in"].indexOf(weather.source) < 0) return false;
+      return ["temperature", "apparentTemperature", "humidity", "windSpeed"].every(function (key) {
+        const value = weather[key];
+        return (typeof value === "number" || (typeof value === "string" && value.trim() !== "")) &&
+          Number.isFinite(Number(value));
+      }) && Number(weather.humidity) >= 0 && Number(weather.humidity) <= 100 && Number(weather.windSpeed) >= 0;
+    }
+
+    function renderWeatherData(record, stale) {
+      const weather = record.weather;
       setWeatherIcon(weather.icon);
       document.getElementById("weatherText").textContent = weather.text;
       document.getElementById("temperature").textContent = weatherNumber(weather.temperature, "");
       document.getElementById("apparentTemp").textContent = weatherNumber(weather.apparentTemperature, "°C");
       document.getElementById("humidity").textContent = weatherNumber(weather.humidity, "%");
       document.getElementById("windSpeed").textContent = weatherNumber(weather.windSpeed, " km/h");
-      const parts = getZonedParts();
-      document.getElementById("weatherUpdated").textContent = parts.hour + ":" + parts.minute + " 更新";
-      setConnectionState(true);
+      const parts = getZonedParts(new Date(record.updatedAt));
+      const updated = document.getElementById("weatherUpdated");
+      const time = parts.hour + ":" + parts.minute;
+      updated.textContent = stale ? Number(parts.month) + "/" + Number(parts.day) + " " + time + " 缓存" : time + " 更新";
+      updated.dataset.source = weather.source;
+      updated.title = "天气来源：" + weather.source;
+      setConnectionState(!stale);
+    }
+
+    function loadCachedWeather() {
+      try {
+        const cached = JSON.parse(window.localStorage.getItem(weatherCacheKey));
+        if (cached && Number.isFinite(cached.updatedAt) && cached.updatedAt > 0 &&
+            cached.updatedAt <= Date.now() && validWeather(cached.weather)) {
+          lastWeather = cached;
+          renderWeatherData(cached, true);
+        }
+      } catch (error) {
+        // Weather can still load in sessions without persistent storage.
+      }
     }
 
     async function updateWeather() {
-      try {
-        let weather;
+      const sources = [["和风天气", fetchQWeather], ["Open-Meteo", fetchOpenMeteo], ["wttr.in", fetchWttr]];
+      for (const source of sources) {
         try {
-          weather = await fetchQWeather();
-        } catch (qweatherError) {
-          weather = await fetchOpenMeteo();
+          const weather = await source[1]();
+          if (weather === null) continue;
+          if (!validWeather(weather)) throw new Error("天气数据无效");
+          lastWeather = { weather, updatedAt: Date.now() };
+          try {
+            window.localStorage.setItem(weatherCacheKey, JSON.stringify(lastWeather));
+          } catch (error) {
+            // An active screen can still keep its latest weather in memory.
+          }
+          renderWeatherData(lastWeather, false);
+          weatherFailures = 0;
+          scheduleFit();
+          setTimeout(updateWeather, CONFIG.weatherUpdateMinutes * 60000);
+          return;
+        } catch (error) {
+          console.warn("天气请求失败", source[0], error.message);
         }
-        renderWeatherData(weather);
-      } catch (error) {
-        setWeatherIcon("unavailable");
-        document.getElementById("weatherText").textContent = "网络异常";
-        document.getElementById("weatherUpdated").textContent = "等待下次更新";
-        document.getElementById("temperature").textContent = "--";
-        document.getElementById("apparentTemp").textContent = "--°C";
-        document.getElementById("humidity").textContent = "--%";
-        document.getElementById("windSpeed").textContent = "-- km/h";
-        setConnectionState(false);
-      } finally {
-        scheduleFit();
       }
+
+      if (lastWeather) {
+        renderWeatherData(lastWeather, true);
+      } else {
+        document.getElementById("weatherText").textContent = "暂时无法获取";
+        document.getElementById("weatherUpdated").textContent = "自动重试中";
+        setConnectionState(false);
+      }
+      scheduleFit();
+      const delay = CONFIG.weatherRetryMinutes[weatherFailures] || CONFIG.weatherUpdateMinutes;
+      weatherFailures = Math.min(weatherFailures + 1, CONFIG.weatherRetryMinutes.length);
+      setTimeout(updateWeather, delay * 60000);
     }
 
     function initAutoFit() {
@@ -1190,7 +1283,7 @@ body::before,body::after {display:none !important;content:none !important;}
       document.documentElement.style.setProperty('background-color',spec.deep,'important');
       v210PaintClock(spec.clockColors,spec.colonEnd);
       document.documentElement.dataset.posterTheme=spec.key;
-      document.documentElement.dataset.posterThemeVersion='2.10.6-github';
+      document.documentElement.dataset.posterThemeVersion='2.10.7-github';
       v210CommittedColor=spec.key==='default'?V29_DEFAULT_COLOR:spec.key;
       v210TargetColor=v210CommittedColor;v210AnimationState='idle';
       v210Trace('theme-committed',{color:v210CommittedColor,posterId:v210TargetPosterId},true);
@@ -1442,7 +1535,7 @@ body::before,body::after {display:none !important;content:none !important;}
       const screenStyle=screen?getComputedStyle(screen):null;
       const bounds=layer&&layer.getBoundingClientRect?layer.getBoundingClientRect():null;
       const spec=v29ThemeSpec(v210TargetColor);
-      return {version:'2.10.6 GitHub',selfTest:diagnosticSelfTesting,index:carouselIndex,count:carouselPosters.length,
+      return {version:'2.10.7 GitHub',selfTest:diagnosticSelfTesting,index:carouselIndex,count:carouselPosters.length,
         posterId:current.id||'',targetId:v210TargetPosterId,nextId:next.id||'',currentColor:current.color||null,
         targetColor:v210TargetColor,committedColor:v210CommittedColor,nextColor:next.color||null,
         animation:v210AnimationState,job:v210ThemeJob,revision:carouselRevision,busy:carouselBusy,
@@ -1626,12 +1719,12 @@ body::before,body::after {display:none !important;content:none !important;}
       fitPosterToContentHeight();
       initAutoFit();
       renderClockAndDuty();
+      loadCachedWeather();
       updateWeather();
 
       setTimeout(scheduleFit, 200);
       setTimeout(scheduleFit, 1200);
       setInterval(renderClockAndDuty, 1000);
-      setInterval(updateWeather, CONFIG.weatherUpdateMinutes * 60 * 1000);
     }
 
     init();

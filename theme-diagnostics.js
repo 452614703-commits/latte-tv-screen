@@ -27,7 +27,7 @@
     }
     overlay.style.display = 'block';
     function short(value) { return String(value == null ? '?' : value).slice(0, 145); }
-    overlay.textContent = 'V2.10.6 GitHub版 · ' + (s.selfTest ? '临时自检（未改原素材）' : '原海报') + '\n'
+    overlay.textContent = 'V2.10.7 GitHub版 · ' + (s.selfTest ? '临时自检（未改原素材）' : '原海报') + '\n'
       + '素材 ' + (s.index + 1) + '/' + s.count + '  ' + short(s.posterId) + '\n'
       + '当前取色 ' + short(s.currentColor) + '  目标 ' + short(s.targetColor) + '\n'
       + '下一张 ' + short(s.nextId) + '  ' + short(s.nextColor) + '\n'
@@ -55,5 +55,5 @@
     send('promise-rejection', { message: String(event.reason).slice(0, 1800) }, false);
   });
   document.addEventListener('visibilitychange', function () { capture('visibility-' + document.visibilityState); });
-  send('diagnostics-loaded', { version: '2.10.6 GitHub', userAgent: navigator.userAgent }, false);
+  send('diagnostics-loaded', { version: '2.10.7 GitHub', userAgent: navigator.userAgent }, false);
 })();
